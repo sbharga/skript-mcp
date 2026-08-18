@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "skript": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/home/shrey/skript-mcp",
+        "--env-file",
+        "/home/shrey/skript-mcp/.env",
+        "skript-mcp"
+      ]
+    }
+  }
+}
