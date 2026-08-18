@@ -14,6 +14,7 @@ Encountered 1 error while reloading __mcp_check_a.sk! (15ms)
     assert result["success"] is False
     assert result["errors"] == [
         {
+            "path": "__mcp_check_a.sk",
             "line": 3,
             "message": "Can't understand this condition/effect: launch the moon",
         }
@@ -30,7 +31,11 @@ Encountered 1 error while reloading folder/example.sk! (5ms)"""
     result = parse_reload_output(diagnostic, diagnostic, "folder/example.sk")
 
     assert result["errors"] == [
-        {"line": 8, "message": "Can't understand this structure: every banana:"}
+        {
+            "path": "folder/example.sk",
+            "line": 8,
+            "message": "Can't understand this structure: every banana:",
+        }
     ]
 
 
@@ -60,6 +65,36 @@ def test_error_summary_without_line_has_fallback() -> None:
 
     assert result["success"] is False
     assert result["errors"][0]["line"] == 0
+
+
+def test_all_scripts_reload_reports_dependency_errors() -> None:
+    output = """Line 4: (lib/utils.sk)
+    Can't understand this condition/effect: launch the moon
+    Line: launch the moon
+Encountered 1 error while reloading all scripts! (5ms)"""
+
+    result = parse_reload_output(output, "", "features/target.sk", all_scripts=True)
+
+    assert result["success"] is False
+    assert result["errors"] == [
+        {
+            "path": "lib/utils.sk",
+            "line": 4,
+            "message": "Can't understand this condition/effect: launch the moon",
+        }
+    ]
+
+
+def test_all_scripts_reload_recognizes_success() -> None:
+    result = parse_reload_output(
+        "Successfully reloaded all scripts. (2ms)",
+        "",
+        "features/target.sk",
+        all_scripts=True,
+    )
+
+    assert result["success"] is True
+    assert result["errors"] == []
 
 
 def test_clean_line_removes_console_and_minecraft_formatting() -> None:

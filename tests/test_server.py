@@ -47,71 +47,38 @@ def settings(tmp_path: Path) -> Settings:
 
 
 @pytest.mark.asyncio
-async def test_check_uses_unique_file_and_cleans_up(tmp_path: Path) -> None:
+async def test_check_reloads_all_scripts_for_shared_functions(tmp_path: Path) -> None:
     runtime = SkriptRuntime(settings(tmp_path))
-    fake = FakeRcon("")
+    fake = FakeRcon("Successfully reloaded all scripts. (2ms)")
     runtime.rcon = fake  # type: ignore[assignment]
+    target = runtime.settings.scripts_dir / "features" / "target.sk"
+    target.parent.mkdir()
+    target.write_text("on load:\n    stop", encoding="utf-8")
 
-    async def reload_with_name(relative_name: str):
-        assert (
-            runtime.settings.scripts_dir / relative_name
-        ).read_text() == "on load:\n\tstop"
-        return {
-            "success": True,
-            "errors": [],
-            "raw_output": f"Successfully reloaded {relative_name}",
-        }
-
-    runtime._reload = reload_with_name  # type: ignore[method-assign]
-    result = await runtime.check_file("on load:\n\tstop")
+    result = await runtime.check_file("features/target.sk")
 
     assert result["success"] is True
-    assert fake.health_checks == 0
+    assert fake.health_checks == 1
     assert len(fake.commands) == 1
-    assert fake.commands[0].startswith("sk disable __mcp_check_")
-    assert list(runtime.settings.scripts_dir.iterdir()) == []
+    assert fake.commands[0] == "sk reload scripts"
 
 
 @pytest.mark.asyncio
-async def test_check_cleans_up_when_reload_fails(tmp_path: Path) -> None:
+async def test_check_accepts_absolute_path_inside_scripts(tmp_path: Path) -> None:
     runtime = SkriptRuntime(settings(tmp_path))
-    fake = FakeRcon("")
-    runtime.rcon = fake  # type: ignore[assignment]
+    target = runtime.settings.scripts_dir / "target.sk"
+    target.write_text("on load:\n    stop", encoding="utf-8")
+    checked: list[str] = []
 
-    async def failed_reload(_relative_name: str):
-        raise RuntimeError("reload failed")
+    async def reload_all(relative_name: str):
+        checked.append(relative_name)
+        return {"success": True, "errors": [], "raw_output": "ok"}
 
-    runtime._reload = failed_reload  # type: ignore[method-assign]
+    runtime._reload_all = reload_all  # type: ignore[method-assign]
+    result = await runtime.check_file(str(target))
 
-    with pytest.raises(RuntimeError, match="reload failed"):
-        await runtime.check_file("bad syntax")
-
-    assert list(runtime.settings.scripts_dir.iterdir()) == []
-    assert any(command.startswith("sk disable") for command in fake.commands)
-
-
-@pytest.mark.asyncio
-async def test_check_retains_disabled_marker_when_unload_fails(tmp_path: Path) -> None:
-    runtime = SkriptRuntime(settings(tmp_path))
-
-    class FailedDisableRcon(FakeRcon):
-        async def execute(self, command: str, *, check_health: bool = True) -> str:
-            if command.startswith("sk disable"):
-                return "Could not disable that script"
-            return await super().execute(command, check_health=check_health)
-
-    runtime.rcon = FailedDisableRcon("")  # type: ignore[assignment]
-
-    async def successful_reload(relative_name: str):
-        return {"success": True, "errors": [], "raw_output": relative_name}
-
-    runtime._reload = successful_reload  # type: ignore[method-assign]
-
-    with pytest.raises(RuntimeError, match="retained"):
-        await runtime.check_file("on join:\n    stop")
-
-    markers = list(runtime.settings.scripts_dir.glob("-__mcp_check_*.sk"))
-    assert len(markers) == 1
+    assert result["success"] is True
+    assert checked == ["target.sk"]
 
 
 @pytest.mark.asyncio
@@ -120,6 +87,16 @@ async def test_reload_rejects_paths_outside_scripts(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         await runtime.reload_file("../outside.sk")
+
+
+@pytest.mark.asyncio
+async def test_check_rejects_paths_outside_scripts(tmp_path: Path) -> None:
+    runtime = SkriptRuntime(settings(tmp_path))
+    outside = tmp_path / "outside.sk"
+    outside.write_text("on load:\n    stop", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="inside the scripts directory"):
+        await runtime.check_file(str(outside))
 
 
 @pytest.mark.asyncio
