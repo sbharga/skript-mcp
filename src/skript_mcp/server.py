@@ -4,9 +4,8 @@ import asyncio
 import os
 import re
 import time
-import uuid
 from dataclasses import dataclass
-from pathlib import Path, PurePath
+from pathlib import Path
 from typing import BinaryIO, TypedDict
 
 from aiomcrcon import Client
@@ -181,25 +180,36 @@ class SkriptRuntime:
 
     def _validate_script_path(self, script: str) -> tuple[Path, str]:
         if not script or any(char in script for char in "\r\n\x00"):
-            raise ValueError("script must be a non-empty relative .sk path")
+            raise ValueError("path must be a non-empty .sk file path")
         if "\\" in script:
             raise ValueError("script paths must use forward slashes")
 
-        pure = PurePath(script)
-        if pure.is_absolute() or ".." in pure.parts or pure.name.startswith("-"):
-            raise ValueError("script path must stay inside the scripts directory")
-        if pure.suffix.casefold() != ".sk":
+        supplied = Path(script).expanduser()
+        if supplied.name.startswith("-"):
+            raise ValueError("disabled scripts cannot be checked")
+        if supplied.suffix.casefold() != ".sk":
             raise ValueError("script path must end in .sk")
 
         root = self.settings.scripts_dir
-        candidate = (root / pure).resolve()
+        unresolved = supplied if supplied.is_absolute() else root / supplied
+        if unresolved.is_symlink():
+            raise ValueError("script does not exist or is not a regular file")
+        candidate = unresolved.resolve()
         if not candidate.is_relative_to(root):
             raise ValueError("script path must stay inside the scripts directory")
         if not candidate.is_file() or candidate.is_symlink():
             raise ValueError("script does not exist or is not a regular file")
-        return candidate, pure.as_posix()
+        return candidate, candidate.relative_to(root).as_posix()
 
     async def _reload(self, relative_name: str) -> CheckResult:
+        return await self._run_reload(relative_name, relative_name)
+
+    async def _reload_all(self, relative_name: str) -> CheckResult:
+        return await self._run_reload("scripts", relative_name, all_scripts=True)
+
+    async def _run_reload(
+        self, reload_target: str, diagnostic_target: str, *, all_scripts: bool = False
+    ) -> CheckResult:
         await self.rcon.health_check()
         capture = LogCapture(self.settings.log_path, self.settings.max_log_bytes)
         capture.start()
@@ -207,61 +217,30 @@ class SkriptRuntime:
         try:
             async with asyncio.timeout(self.settings.reload_timeout):
                 response = await self.rcon.execute(
-                    f"sk reload {relative_name}", check_health=False
+                    f"sk reload {reload_target}", check_health=False
                 )
                 log_output = await capture.collect(
                     deadline, self.settings.log_settle_time
                 )
         except TimeoutError as error:
             raise RuntimeError(
-                f"Skript reload timed out for {relative_name}"
+                f"Skript reload timed out for {reload_target}"
             ) from error
         finally:
             capture.close()
-        return parse_reload_output(response, log_output, relative_name)
+        return parse_reload_output(
+            response, log_output, diagnostic_target, all_scripts=all_scripts
+        )
 
-    async def check_file(self, contents: str) -> CheckResult:
-        encoded = contents.encode("utf-8")
-        if len(encoded) > self.settings.max_script_bytes:
+    async def check_file(self, script: str) -> CheckResult:
+        path, relative_name = self._validate_script_path(script)
+        if path.stat().st_size > self.settings.max_script_bytes:
             raise ValueError(
                 f"script exceeds the {self.settings.max_script_bytes}-byte limit"
             )
 
         async with self.operation_lock:
-            self.settings.scripts_dir.mkdir(parents=True, exist_ok=True)
-            name = f"__mcp_check_{uuid.uuid4().hex}.sk"
-            path = self.settings.scripts_dir / name
-            disabled_path = path.with_name(f"-{name}")
-            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-            if hasattr(os, "O_NOFOLLOW"):
-                flags |= os.O_NOFOLLOW
-            descriptor = os.open(path, flags, 0o600)
-            cleanup_error: str | None = None
-            try:
-                with os.fdopen(descriptor, "wb") as stream:
-                    stream.write(encoded)
-                result = await self._reload(name)
-            finally:
-                try:
-                    response = await self.rcon.execute(f"sk disable {name}")
-                    if not self._disable_succeeded(response, name):
-                        cleanup_error = (
-                            f"unexpected disable response: {clean_line(response)}"
-                        )
-                except Exception as error:
-                    cleanup_error = str(error)
-
-                if cleanup_error is None:
-                    path.unlink(missing_ok=True)
-                    disabled_path.unlink(missing_ok=True)
-                elif path.exists():
-                    path.replace(disabled_path)
-            if cleanup_error is not None:
-                raise RuntimeError(
-                    f"Temporary script could not be unloaded and was retained as "
-                    f"{disabled_path.name}: {cleanup_error}. Restart Paper, then run skript_reset."
-                )
-            return result
+            return await self._reload_all(relative_name)
 
     @staticmethod
     def _disable_succeeded(response: str, name: str) -> bool:
@@ -377,9 +356,9 @@ mcp = MCPServer("skript-mcp", version=__version__)
 
 
 @mcp.tool()
-async def skript_check_file(contents: str) -> CheckResult:
-    """Validate Skript source against the running server's exact plugin set."""
-    return await get_runtime().check_file(contents)
+async def skript_check_file(path: str) -> CheckResult:
+    """Validate a .sk path inside SKRIPT_SCRIPTS_DIR with all sibling scripts loaded."""
+    return await get_runtime().check_file(path)
 
 
 @mcp.tool()

@@ -101,9 +101,12 @@ Restart OpenCode after changing its configuration.
 
 ### Tools
 
-- `skript_check_file(contents)` writes a unique temporary script, reloads it,
-  parses diagnostics, unloads it, and deletes it.
-- `skript_reload_file(path)` reloads an existing path relative to `scripts`.
+- `skript_check_file(path)` validates an existing `.sk` file by path. Relative
+  paths are resolved under `SKRIPT_SCRIPTS_DIR`; absolute paths are accepted
+  when they point inside that directory. It reloads the complete script set so
+  functions and other shared definitions from sibling scripts are available.
+- `skript_reload_file(path)` reloads one existing path inside
+  `SKRIPT_SCRIPTS_DIR` without reloading its siblings.
 - `minecraft_command(command)` runs a privileged command over local RCON.
 - `minecraft_logs(lines=200)` returns a bounded tail of `latest.log`.
 - `skript_reset()` removes only stale `__mcp_check_<uuid>.sk` files.
@@ -115,10 +118,10 @@ offset are captured and merged as a secondary source.
 
 ### Safety
 
-`skript_check_file` performs a real Skript load, not a sandboxed parse. Source
-containing `on load` handlers or addon behavior can modify the world, files, or
-external systems. Only submit trusted source, and treat `minecraft_command` and
-the RCON password as full administrator access.
+`skript_check_file` performs a real reload of every enabled script, not a
+sandboxed parse. Source containing `on load` handlers or addon behavior can
+modify the world, files, or external systems. Only check trusted scripts, and
+treat `minecraft_command` and the RCON password as full administrator access.
 
 Run unit tests with:
 
