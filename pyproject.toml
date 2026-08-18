@@ -1,0 +1,27 @@
+[project]
+name = "skript-mcp"
+version = "0.1.0"
+description = "MCP tools backed by an authoritative Paper and Skript server"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aio-mc-rcon>=3.4,<4",
+    "mcp>=2,<3",
+]
+
+[project.scripts]
+skript-mcp = "skript_mcp.server:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4,<9",
+    "pytest-asyncio>=1.1,<2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
