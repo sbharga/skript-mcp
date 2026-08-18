@@ -26,8 +26,16 @@ the whole profile to a newer Minecraft and SkBee release.
 
 ### Start Paper
 
-Create a local environment file and replace the password with a long random
-value containing only letters, numbers, dots, underscores, or hyphens:
+Run the setup script. It checks Docker and `uv`, creates `.env` with a random
+RCON password, installs dependencies, builds Paper, and verifies RCON:
+
+```bash
+./setup.sh
+```
+
+For manual setup, create a local environment file and replace the password with
+a long random value containing only letters, numbers, dots, underscores, or
+hyphens:
 
 ```bash
 cp .env.example .env
