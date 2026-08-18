@@ -1,0 +1,40 @@
+name: skript-mcp
+
+services:
+  paper:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        PAPER_URL: ${PAPER_URL:-https://fill-data.papermc.io/v1/objects/5ee4f542f628a14c644410b08c94ea42e772ef4d29fe92973636b6813d4eaffc/paper-1.21.4-232.jar}
+        PAPER_SHA256: ${PAPER_SHA256:-5ee4f542f628a14c644410b08c94ea42e772ef4d29fe92973636b6813d4eaffc}
+        SKRIPT_URL: ${SKRIPT_URL:-https://github.com/SkriptLang/Skript/releases/download/2.14.3/Skript-2.14.3.jar}
+        SKRIPT_SHA256: ${SKRIPT_SHA256:-91c6a2df0c993b0e1700689db1a977d5676a5ca131fb62c5f32be9e9f36b5d6d}
+        SKBEE_URL: ${SKBEE_URL:-https://cdn.modrinth.com/data/a0tlbHZO/versions/YUe8KJhT/SkBee-3.16.1.jar}
+        SKBEE_SHA512: ${SKBEE_SHA512:-e1e55263a5b71a69132b154bc56e8c235032f51e7341b070019e1bd2bd9715f0dcb62bc350c7545b7360644521d654ac6eb42e4209a62a99986dcb8430a4ffb6}
+        SKRIPT_REFLECT_URL: ${SKRIPT_REFLECT_URL:-https://github.com/SkriptLang/skript-reflect/releases/download/v2.6.3/skript-reflect-2.6.3.jar}
+        SKRIPT_REFLECT_SHA256: ${SKRIPT_REFLECT_SHA256:-0b422b828e17aac9e8417b6876924c1dcc221f6a065fb0a21b00da07fc298877}
+        SKRIPT_GUI_URL: ${SKRIPT_GUI_URL:-https://github.com/APickledWalrus/skript-gui/releases/download/1.4.0/skript-gui-1.4.0.jar}
+        SKRIPT_GUI_SHA256: ${SKRIPT_GUI_SHA256:-2e59842bf5a01d38fb546027b223aeb248a0e3d5abef007e2feb39cda9d61b16}
+    restart: unless-stopped
+    stop_grace_period: 2m
+    environment:
+      JAVA_OPTS: ${JAVA_OPTS:--Xms1G -Xmx2G}
+      PGID: ${PGID:-1000}
+      PUID: ${PUID:-1000}
+      RCON_PASSWORD: ${RCON_PASSWORD:?Set RCON_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:25575:25575/tcp"
+    volumes:
+      - type: bind
+        source: ./runtime/logs
+        target: /server/logs
+      - type: bind
+        source: ./scripts
+        target: /server/plugins/Skript/scripts
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 25575"]
+      start_period: 2m
+      interval: 10s
+      timeout: 3s
+      retries: 6

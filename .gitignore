@@ -1,0 +1,42 @@
+# Python bytecode and build artifacts
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info/
+
+# Virtual environments and tool caches
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Paper runtime data and logs
+runtime/*
+!runtime/logs/
+runtime/logs/*
+!runtime/logs/.gitkeep
+*.jar
+
+# Temporary scripts created by the MCP server
+scripts/__mcp_check_*.sk
+scripts/-__mcp_check_*.sk
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
